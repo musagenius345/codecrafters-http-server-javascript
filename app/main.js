@@ -13,32 +13,19 @@ function extractPathAndUserAgent(requestString) {
 }
 
 const server = net.createServer((socket) => {
-  let requestBody = '';
-
   socket.on('data', (data) => {
-    requestBody += data.toString();
-  });
+    const req = data.toString().trim();
+    const { path: rawPath, userAgent } = extractPathAndUserAgent(req);
+    const method = req.split(' ')[0];
 
-  socket.on('end', () => {
-    const { path: rawPath, userAgent } = extractPathAndUserAgent(requestBody);
-
-    if (rawPath.startsWith('/files/') && rawPath.includes('POST')) {
-      const directory = process.argv[3]; // Get the directory from command line arguments
-      const filename = rawPath.split('/files/')[1];
-      const filePath = path.join(directory, filename);
-
-      // Extract the file content from the request body
-      const fileContent = requestBody.split('\r\n\r\n')[1];
-
-      fs.writeFileSync(filePath, fileContent, 'utf-8'); // Save the file content to the specified path
-
-      const createdResponse = 'HTTP/1.1 201 Created\r\nContent-Type: text/plain\r\nContent-Length: 7\r\n\r\nCreated';
-      socket.write(createdResponse, 'utf-8', () => {
-        console.log('File saved, 201 response sent, connection closed');
+    if (rawPath === '/') {
+      const response = 'HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 3\r\n\r\nabc';
+      socket.write(response, 'utf-8', () => {
+        console.log('Response sent, connection closed');
         socket.end();
       });
-    } else if (rawPath.startsWith('/files/') && !rawPath.includes('POST')) {
-      const directory = process.argv[3]; // Get the directory from command line arguments
+    } else if (rawPath.startsWith('/files/') && method === 'GET') {
+      const directory = process.argv[3];
       const filename = rawPath.split('/files/')[1];
       const filePath = path.join(directory, filename);
 
@@ -56,14 +43,20 @@ const server = net.createServer((socket) => {
           socket.end();
         });
       }
-    } else if (rawPath === '/user-agent') {
-      const response = `HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: ${userAgent.length}\r\n\r\n${userAgent}`;
+    } else if (rawPath.startsWith('/files/') && method === 'POST') {
+      const directory = process.argv[3];
+      const filename = rawPath.split('/files/')[1];
+      const content = req.split('\r\n\r\n')[1];
+      const filePath = path.join(directory, filename);
+
+      fs.writeFileSync(filePath, content);
+      const response = 'HTTP/1.1 201 CREATED\r\n\r\n';
       socket.write(response, 'utf-8', () => {
-        console.log('Response sent, connection closed');
+        console.log('File created, 201 response sent, connection closed');
         socket.end();
       });
-    } else if (rawPath === '/') {
-      const response = 'HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 3\r\n\r\nabc';
+    } else if (rawPath === '/user-agent') {
+      const response = `HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: ${userAgent.length}\r\n\r\n${userAgent}`;
       socket.write(response, 'utf-8', () => {
         console.log('Response sent, connection closed');
         socket.end();
