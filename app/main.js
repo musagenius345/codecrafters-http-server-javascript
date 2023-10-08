@@ -19,7 +19,7 @@ const server = net.createServer((socket) => {
       const randomString = path.substring('/echo/'.length);
       response = `HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: ${randomString.length}\r\n\r\n${randomString}`;
     } else {
-      response = 'HTTP/1.1 404 Not Found\r\nContent-Type: text/plain\r\nContent-Length: 9\r\n\r\nNot Found';
+      response = 'HTTP/1.1 404 Not Found\r\nContent-Type: text/plain\r\nContent-Length: 17\r\n\r\nNot Found';
     }
 
     socket.write(response, 'utf-8', () => {
