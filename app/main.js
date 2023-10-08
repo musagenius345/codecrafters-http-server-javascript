@@ -1,27 +1,31 @@
-const { log } = require("console");
+
 const net = require("net");
 
-// You can use print statements as follows for debugging, they'll be visible when running tests.
 console.log("Logs from your program will appear here!");
+
+function extractPath(requestString) {
+  const [startLine] = requestString.split('\r\n');
+  const [HTTPMethod, path, HTTPVersion] = startLine.split(' ');
+  return path;
+}
 
 const server = net.createServer((socket) => {
   socket.on("data", (data) => {
-    log(data)
+    const requestPath = extractPath(data.toString().trim());
 
-    const response = 'HTTP/1.1 200 OK\r\n\r\n'
+    let response;
+    if (requestPath === '/') {
+      response = 'HTTP/1.1 200 OK\r\n\r\n';
+    } else {
+      response = 'HTTP/1.1 404 Not Found\r\n\r\n';
+    }
 
     socket.write(response, 'utf-8', () => {
-      log('Response sent, connection closed')
-    })
-
-    socket.end()
-    server.close()
-  })
-
-  socket.on("close", () => {
-    socket.end();
-    server.close();
+      console.log('Response sent, connection closed');
+      socket.end();
+    });
   });
 });
 
 server.listen(4221, "localhost");
+
