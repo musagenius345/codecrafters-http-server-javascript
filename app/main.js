@@ -1,3 +1,5 @@
+
+const fs = require('fs');
 const net = require('net');
 
 console.log('Logs from your program will appear here!');
@@ -15,7 +17,15 @@ const server = net.createServer((socket) => {
     const { path, userAgent } = extractPathAndUserAgent(data.toString().trim());
 
     let response;
-    if (path === '/user-agent') {
+    if (path.startsWith('/files/')) {
+      const filePath = path.substring('/files/'.length);
+      if (fs.existsSync(filePath)) {
+        const fileContent = fs.readFileSync(filePath, 'utf-8');
+        response = `HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: ${fileContent.length}\r\n\r\n${fileContent}`;
+      } else {
+        response = 'HTTP/1.1 404 Not Found\r\nContent-Type: text/plain\r\nContent-Length: 9\r\n\r\nNot Found';
+      }
+    } else if (path === '/user-agent') {
       response = `HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: ${userAgent.length}\r\n\r\n${userAgent}`;
     } else if (path === '/') {
       response = 'HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 3\r\n\r\nabc';
@@ -30,6 +40,10 @@ const server = net.createServer((socket) => {
       console.log('Response sent, connection closed');
       socket.end();
     });
+  });
+
+  socket.on('close', () => {
+    console.log('Connection closed');
   });
 });
 
