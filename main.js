@@ -1,42 +1,44 @@
+const fs = require('fs');
 const net = require('net');
-const fs = require('fs').promises;
-const path = require('path');
 
 console.log('Logs from your program will appear here!');
 
-function extractPath(requestString) {
+function extractPathAndUserAgent(requestString) {
   const [startLine, ...headers] = requestString.split('\r\n');
   const [, path] = startLine.split(' ');
-  return path;
+  const userAgentLine = headers.find((line) => line.startsWith('User-Agent: '));
+  const userAgent = userAgentLine ? userAgentLine.split(' ')[1] : '';
+  return { path, userAgent };
 }
 
 const server = net.createServer((socket) => {
-  socket.on('data', async (data) => {
-    const requestPath = extractPath(data.toString().trim());
+  socket.on('data', (data) => {
+    const { path, userAgent } = extractPathAndUserAgent(data.toString().trim());
 
-    if (requestPath.startsWith('/files/')) {
-      const fileName = requestPath.substring('/files/'.length);
-      const directoryPath = process.argv[3]; // Get directory path from command line argument
-
-      try {
-        const filePath = path.join(directoryPath, fileName);
-        const fileContent = await fs.readFile(filePath);
-        const contentLength = fileContent.length;
-
-        socket.write(`HTTP/1.1 200 OK\r\n`);
-        socket.write(`Content-Type: application/octet-stream\r\n`);
-        socket.write(`Content-Length: ${contentLength}\r\n\r\n`);
-        socket.write(fileContent);
-      } catch (error) {
-        // File not found, return 404 response
-        socket.write(`HTTP/1.1 404 Not Found\r\n\r\n`);
+    let response;
+    if (path.startsWith('/files/')) {
+      const filePath = path.substring('/files/'.length);
+      if (fs.existsSync(filePath)) {
+        const fileContent = fs.readFileSync(filePath, 'utf-8');
+        response = `HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: ${fileContent.length}\r\n\r\n${fileContent}`;
+      } else {
+        response = 'HTTP/1.1 404 Not Found\r\nContent-Type: text/plain\r\nContent-Length: 9\r\n\r\nNot Found';
       }
+    } else if (path === '/user-agent') {
+      response = `HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: ${userAgent.length}\r\n\r\n${userAgent}`;
+    } else if (path === '/') {
+      response = 'HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 3\r\n\r\nabc';
+    } else if (path.startsWith('/echo/')) {
+      const randomString = path.substring('/echo/'.length);
+      response = `HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: ${randomString.length}\r\n\r\n${randomString}`;
     } else {
-      // Handle other types of requests (e.g., user-agent, echo)
-      // ... (same as the original code)
+      response = 'HTTP/1.1 404 Not Found\r\nContent-Type: text/plain\r\nContent-Length: 9\r\n\r\nNot Found';
     }
 
-    socket.end();
+    socket.write(response, 'utf-8', () => {
+      console.log('Response sent, connection closed');
+      socket.end();
+    });
   });
 
   socket.on('close', () => {
