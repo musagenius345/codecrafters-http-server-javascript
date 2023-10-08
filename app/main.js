@@ -15,19 +15,11 @@ const server = net.createServer((socket) => {
   socket.on('data', (data) => {
     const { path, userAgent } = extractPathAndUserAgent(data.toString().trim());
 
-    let response;
     if (path.startsWith('/files/')) {
-      const filePath = path.substring('/files/'.length);
-      if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+      const filePath = `.${path}`; // Assuming files are in the current directory
+      if (fs.existsSync(filePath)) {
         const fileContent = fs.readFileSync(filePath);
-        const contentLength = Buffer.from(fileContent).length;
-        response = `HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: ${contentLength}\r\n\r\n`;
-        socket.write(response, 'binary');
-        socket.write(fileContent, 'binary', () => {
-          console.log('File content sent');
-          socket.end();
-        });
-        return;
+        response = `HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: ${fileContent.length}\r\n\r\n${fileContent}`;
       } else {
         response = 'HTTP/1.1 404 Not Found\r\nContent-Type: text/plain\r\nContent-Length: 9\r\n\r\nNot Found';
       }
