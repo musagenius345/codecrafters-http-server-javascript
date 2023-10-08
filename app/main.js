@@ -9,13 +9,19 @@ function extractPath(requestString) {
   return path;
 }
 
+function extractEndpoint(path){
+  const parts =  path.split('/')
+  return parts[2] || ''
+}
+
 const server = net.createServer((socket) => {
   socket.on("data", (data) => {
     const requestPath = extractPath(data.toString().trim());
+    const endPoint = extractEndpoint(requestPath)
 
     let response;
-    if (requestPath === '/') {
-      response = 'HTTP/1.1 200 OK\r\n\r\n';
+    if (endPoint) {
+      response = `HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: ${endPoint.length}\r\n\r\n${endPoint}`;
     } else {
       response = 'HTTP/1.1 404 Not Found\r\n\r\n';
     }
