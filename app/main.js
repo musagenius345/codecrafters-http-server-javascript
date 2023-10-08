@@ -1,5 +1,6 @@
 const fs = require('fs');
 const net = require('net');
+const path = require('path');
 
 console.log('Logs from your program will appear here!');
 
@@ -16,9 +17,10 @@ const server = net.createServer((socket) => {
     const { path, userAgent } = extractPathAndUserAgent(data.toString().trim());
 
     if (path.startsWith('/files/')) {
-      const filePath = `.${path}`; // Assuming files are in the current directory
-      if (fs.existsSync(filePath)) {
-        const fileContent = fs.readFileSync(filePath);
+      const filePath = path.substring('/files/'.length);
+      const absolutePath = path.join(__dirname, filePath); // Constructing absolute path using path module
+      if (fs.existsSync(absolutePath)) {
+        const fileContent = fs.readFileSync(absolutePath);
         response = `HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: ${fileContent.length}\r\n\r\n${fileContent}`;
       } else {
         response = 'HTTP/1.1 404 Not Found\r\nContent-Type: text/plain\r\nContent-Length: 9\r\n\r\nNot Found';
