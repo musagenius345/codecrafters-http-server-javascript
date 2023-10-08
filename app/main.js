@@ -1,51 +1,59 @@
-const fs = require('fs');
-const path = require('path');
-
 const net = require('net');
+const fs = require('fs').promises;
+const pathModule = require('path');
 
 console.log('Logs from your program will appear here!');
 
-const directoryFlagIndex = process.argv.indexOf('--directory');
-if (directoryFlagIndex === -1 || !process.argv[directoryFlagIndex + 1]) {
-  console.error('Error: Please provide a valid directory path using --directory flag.');
-  process.exit(1);
+function extractPath(requestString) {
+  const [startLine] = requestString.split('\r\n');
+  const [, path] = startLine.split(' ');
+  return path;
 }
-const directoryPath = process.argv[directoryFlagIndex + 1];
+
+async function serveFile(socket, filePath) {
+  try {
+    const fileContent = await fs.readFile(filePath);
+    const contentLength = fileContent.length;
+
+    socket.write(`HTTP/1.1 200 OK\r\n`);
+    socket.write(`Content-Type: application/octet-stream\r\n`);
+    socket.write(`Content-Length: ${contentLength}\r\n\r\n`);
+    socket.write(fileContent, () => {
+      console.log('Response sent, connection closed');
+      socket.end();
+    });
+  } catch (error) {
+    console.error(error);
+    socket.write(`HTTP/1.1 404 Not Found\r\n\r\n`);
+    socket.end();
+  }
+}
 
 const server = net.createServer((socket) => {
-  socket.on('data', (data) => {
-    const [method, requestPath] = extractMethodAndPath(data.toString().trim());
+  socket.on('data', async (data) => {
+    const path = extractPath(data.toString().trim());
+    const basePath = '<directory>'; // Replace '<directory>' with the actual directory path
 
-    if (method === 'GET' && requestPath.startsWith('/files/')) {
-      const filename = requestPath.substring('/files/'.length);
-      const filePath = path.join(directoryPath, filename);
+    if (path.startsWith('/files/')) {
+      const requestedFile = pathModule.join(basePath, path.substring('/files/'.length));
 
-      if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
-        const fileContent = fs.readFileSync(filePath);
-        const contentLength = fileContent.length;
-
-        socket.write(
-          `HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: ${contentLength}\r\n\r\n`
-        );
-        socket.write(fileContent, () => {
-          console.log('Response sent, connection closed');
-          socket.end();
-        });
-      } else {
-        socket.write('HTTP/1.1 404 Not Found\r\n\r\n');
-        socket.end();
+      // Check if the requested file exists in the specified directory
+      try {
+        const stats = await fs.stat(requestedFile);
+        if (stats.isFile()) {
+          // Serve the file content as response
+          await serveFile(socket, requestedFile);
+          return;
+        }
+      } catch (error) {
+        console.error(error);
       }
-    } else {
-      socket.write('HTTP/1.1 400 Bad Request\r\n\r\n');
-      socket.end();
     }
+
+    // If the requested file doesn't exist or invalid path, return a 404 response
+    socket.write(`HTTP/1.1 404 Not Found\r\n\r\n`);
+    socket.end();
   });
 });
-
-function extractMethodAndPath(requestString) {
-  const [startLine] = requestString.split('\r\n');
-  const [method, path] = startLine.split(' ');
-  return [method, path];
-}
 
 server.listen(4221, 'localhost');
