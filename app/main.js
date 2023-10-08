@@ -2,41 +2,35 @@ const net = require('net');
 
 console.log('Logs from your program will appear here!');
 
+function extractPathAndUserAgent(requestString) {
+  const [startLine, ...headers] = requestString.split('\r\n');
+  const [, path] = startLine.split(' ');
+  const userAgentLine = headers.find((line) => line.startsWith('User-Agent: '));
+  const userAgent = userAgentLine ? userAgentLine.split(' ')[1] : '';
+  return { path, userAgent };
+}
+
 const server = net.createServer((socket) => {
   socket.on('data', (data) => {
-    const request = data.toString().trim();
+    const { path, userAgent } = extractPathAndUserAgent(data.toString().trim());
 
-    // Check if the request is empty or not a valid GET request
-    if (request !== 'GET /files/<filename> HTTP/1.1') {
-      socket.write('HTTP/1.1 400 Bad Request\r\n\r\n');
-      socket.end();
-      return;
+    let response;
+    if (path === '/user-agent') {
+      response = `HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: ${userAgent.length}\r\n\r\n${userAgent}`;
+    } else if (path === '/') {
+      response = 'HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 3\r\n\r\nabc';
+    } else if (path.startsWith('/echo/')) {
+      const randomString = path.substring('/echo/'.length);
+      response = `HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: ${randomString.length}\r\n\r\n${randomString}`;
+    } else {
+      response = 'HTTP/1.1 404 Not Found\r\nContent-Type: text/plain\r\nContent-Length: 9\r\n\r\nNot Found';
     }
 
-    // Replace '<filename>' with the actual filename to be served
-    const filePath = '<directory>/<filename>'; // Replace '<directory>' with the actual directory path
-    const statusCode = 200;
-
-    // Respond with HTTP/1.1 200 OK\r\n\r\n
-    socket.write(`HTTP/1.1 ${statusCode} OK\r\n\r\n`);
-    
-    // Read the file asynchronously and send its contents as the response body
-    require('fs').readFile(filePath, (err, data) => {
-      if (err) {
-        console.error(err);
-        socket.write('Error reading the file\r\n');
-      } else {
-        socket.write(data);
-      }
-
+    socket.write(response, 'utf-8', () => {
+      console.log('Response sent, connection closed');
       socket.end();
     });
-  });
-
-  socket.on('close', () => {
-    console.log('Connection closed');
   });
 });
 
 server.listen(4221, 'localhost');
-
