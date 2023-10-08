@@ -1,46 +1,86 @@
 const fs = require('fs');
 const net = require('net');
-const path = require('path');
+const path = require('path'); // Import the path module
 
 console.log('Logs from your program will appear here!');
 
+function extractPathAndUserAgent(requestString) {
+  const [startLine, ...headers] = requestString.split('\r\n');
+  const [, path] = startLine.split(' ');
+  const userAgentLine = headers.find((line) => line.startsWith('User-Agent: '));
+  const userAgent = userAgentLine ? userAgentLine.split(' ')[1] : '';
+  return { path, userAgent };
+}
+
 const server = net.createServer((socket) => {
-  let requestData = '';
+  let requestBody = '';
 
   socket.on('data', (data) => {
-    requestData += data.toString();
+    requestBody += data.toString();
+  });
 
-    // Check if the request data includes the end of a POST request header
-    if (requestData.includes('\r\n\r\n')) {
-      const [headers, body] = requestData.split('\r\n\r\n');
-      const [startLine, ...headerLines] = headers.split('\r\n');
-      const [, method, path] = startLine.split(' ');
+  socket.on('end', () => {
+    const { path: rawPath, userAgent } = extractPathAndUserAgent(requestBody);
 
-      if (method === 'POST' && path.startsWith('/files/')) {
-        const directory = process.argv[3];
-        const filename = path.split('/files/')[1];
-        const filePath = path.join(directory, filename);
+    if (rawPath.startsWith('/files/') && rawPath.includes('POST')) {
+      const directory = process.argv[3]; // Get the directory from command line arguments
+      const filename = rawPath.split('/files/')[1];
+      const filePath = path.join(directory, filename);
 
-        // Save the POST body (file content) to the specified file
-        fs.writeFileSync(filePath, body);
+      // Extract the file content from the request body
+      const fileContent = requestBody.split('\r\n\r\n')[1];
 
-        // Send a 201 Created response
-        const response = 'HTTP/1.1 201 Created\r\nContent-Length: 0\r\n\r\n';
+      fs.writeFileSync(filePath, fileContent, 'utf-8'); // Save the file content to the specified path
+
+      const createdResponse = 'HTTP/1.1 201 Created\r\nContent-Type: text/plain\r\nContent-Length: 7\r\n\r\nCreated';
+      socket.write(createdResponse, 'utf-8', () => {
+        console.log('File saved, 201 response sent, connection closed');
+        socket.end();
+      });
+    } else if (rawPath.startsWith('/files/') && !rawPath.includes('POST')) {
+      const directory = process.argv[3]; // Get the directory from command line arguments
+      const filename = rawPath.split('/files/')[1];
+      const filePath = path.join(directory, filename);
+
+      if (fs.existsSync(filePath)) {
+        const fileContent = fs.readFileSync(filePath);
+        const response = `HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: ${fileContent.length}\r\n\r\n${fileContent}`;
         socket.write(response, 'utf-8', () => {
-          console.log('File created, 201 response sent, connection closed');
+          console.log('Response sent, connection closed');
           socket.end();
         });
       } else {
-        // Handle other request types here if needed
-        // ...
-
-        // Send a 404 Not Found response for unsupported routes
         const notFoundResponse = 'HTTP/1.1 404 Not Found\r\nContent-Type: text/plain\r\nContent-Length: 9\r\n\r\nNot Found';
         socket.write(notFoundResponse, 'utf-8', () => {
-          console.log('Path not found, 404 response sent, connection closed');
+          console.log('File not found, 404 response sent, connection closed');
           socket.end();
         });
       }
+    } else if (rawPath === '/user-agent') {
+      const response = `HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: ${userAgent.length}\r\n\r\n${userAgent}`;
+      socket.write(response, 'utf-8', () => {
+        console.log('Response sent, connection closed');
+        socket.end();
+      });
+    } else if (rawPath === '/') {
+      const response = 'HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 3\r\n\r\nabc';
+      socket.write(response, 'utf-8', () => {
+        console.log('Response sent, connection closed');
+        socket.end();
+      });
+    } else if (rawPath.startsWith('/echo/')) {
+      const randomString = rawPath.substring('/echo/'.length);
+      const response = `HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: ${randomString.length}\r\n\r\n${randomString}`;
+      socket.write(response, 'utf-8', () => {
+        console.log('Response sent, connection closed');
+        socket.end();
+      });
+    } else {
+      const notFoundResponse = 'HTTP/1.1 404 Not Found\r\nContent-Type: text/plain\r\nContent-Length: 9\r\n\r\nNot Found';
+      socket.write(notFoundResponse, 'utf-8', () => {
+        console.log('Path not found, 404 response sent, connection closed');
+        socket.end();
+      });
     }
   });
 
